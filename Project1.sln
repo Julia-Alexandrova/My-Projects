@@ -1,0 +1,60 @@
+using System;
+
+using System.Reflection;
+using System.IO;
+
+
+public enum VisualStudioVersion { VS2010 = 100, VS2008 = 90, VS2005 = 80, VSNet2003 = 71, VSNet2002 = 70, Previous = 0, VSNext = 666 };
+
+public class SolutionHelper
+{
+
+    public static VisualStudioVersion GetSolutionVersion(string solutionFile)
+    {
+        Type _solutionParser;
+        PropertyInfo solutionParser_version;
+        PropertyInfo solutionParser_solutionReader;
+        MethodInfo solutionParser_parseSolution;
+
+
+        _solutionParser = Type.GetType("Microsoft.Build.Construction.SolutionParser, Microsoft.Build, version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", false, false);
+
+        if (_solutionParser == null)
+        {
+
+            throw new Exception("Can't load msbuild assembly. Is .Net FX 4.0 installed?");
+        }
+
+        solutionParser_solutionReader = _solutionParser.GetProperty("SolutionReader", BindingFlags.NonPublic | BindingFlags.Instance);
+        solutionParser_version = _solutionParser.GetProperty("version", BindingFlags.NonPublic | BindingFlags.Instance);
+        solutionParser_parseSolution = _solutionParser.GetMethod("ParseSolution", BindingFlags.NonPublic | BindingFlags.Instance);
+        solutionParser_version = _solutionParser.GetProperty("Version", BindingFlags.NonPublic | BindingFlags.Instance);
+
+
+        var solutionParserInstance = _solutionParser.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)[0].Invoke(null);
+        using (var streamReader = new StreamReader(solutionFile))
+        {
+            solutionParser_solutionReader.SetValue(solutionParserInstance, streamReader, null);
+            solutionParser_parseSolution.Invoke(solutionParserInstance, null);
+        }
+
+
+        var solutionFileFormatNumber = solutionParser_version.GetValue(solutionParserInstance, null);
+
+        return GetVSVersion(Convert.ToInt32(solutionFileFormatNumber));
+
+    }
+
+    private static VisualStudioVersion GetVSVersion(int version)
+    {
+        if (version > 11) return VisualStudioVersion.VSNext;
+
+        if (version == 11) return VisualStudioVersion.VS2010;
+        if (version == 10) return VisualStudioVersion.VS2008;
+        if (version == 9) return VisualStudioVersion.VS2005;
+        if (version == 8) return VisualStudioVersion.VSNet2003;
+        if (version == 7) return VisualStudioVersion.VSNet2002;
+
+        return VisualStudioVersion.Previous;
+    }
+}
